@@ -14,6 +14,16 @@
         .overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 15px; z-index: 10; padding: 20px; text-align: center; }
         button { padding: 15px 30px; font-size: 20px; cursor: pointer; border: none; background: #007bff; color: white; border-radius: 10px; width: 250px; }
         input { padding: 15px; font-size: 18px; border: 2px solid #ddd; border-radius: 10px; width: 250px; outline: none; }
+        .tg-button { 
+            background: #24A1DE !important; 
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: white;
+            font-family: sans-serif;
+        }
     </style>
 </head>
 <body>
@@ -25,6 +35,10 @@
     <input id="nameInput" placeholder="Введите имя" maxlength="15">
     <button onclick="startGame()">Играть</button>
     <button onclick="showLeaderboard()" style="background:#6c757d">🏆 Лидеры</button>
+    
+    <a href="https://t.me/+godxyKIhKEs3Zjhi" target="_blank" style="text-decoration: none;">
+        <button class="tg-button">📢 Наш Telegram</button>
+    </a>
 </div>
 
 <div id="gameOver" class="overlay" style="display: none;">
@@ -38,13 +52,11 @@
 
 <script>
 // --- ИНИЦИАЛИЗАЦИЯ SUPABASE ---
-// ВАЖНО: Используем let и объявляем только ЗДЕСЬ один раз.
 const SB_URL = "https://zwzrnkpygvfgzsyzjjsy.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3enJua3B5Z3ZmZ3pzeXpqanN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MzUwMTMsImV4cCI6MjA5MTQxMTAxM30.EgZcfaL3dO0nv2utfaIYYk3ROfKdZO__psw2Pk0q6qo";
 let supabaseClient; 
 
 try {
-    // Называем переменную иначе, чтобы не было конфликта с глобальным объектом окна
     supabaseClient = window.supabase.createClient(SB_URL, SB_KEY);
 } catch (e) {
     console.error("Критическая ошибка Supabase:", e);
@@ -79,10 +91,24 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
+// *** ИЗМЕНЕНО: Добавлены новые типы и очень маленькие шансы ***
 function spawnPoint() {
-    const types = ["common", "rare", "epic"];
     const r = Math.random();
-    let type = r < 0.7 ? "common" : (r < 0.9 ? "rare" : "epic");
+    let type;
+    
+    // Определяем тип на основе вероятности
+    if (r < 0.70) {
+        type = "common"; // 70%
+    } else if (r < 0.90) {
+        type = "rare";   // 20%
+    } else if (r < 0.98) {
+        type = "epic";   // 8%
+    } else if (r < 0.995) {
+        type = "green";  // 1.5% (ОЧЕНЬ МАЛО)
+    } else {
+        type = "rainbow";// 0.5% (СУПЕР РЕДКО)
+    }
+
     points.push({
         x: Math.random() * (canvas.width - 50) + 25,
         y: Math.random() * (canvas.height - 50) + 25,
@@ -118,17 +144,47 @@ function update() {
         enemy.y += (dy / dist) * speed;
     }
 
-    // Отрисовка еды
+    // *** ИЗМЕНЕНО: Отрисовка еды с новыми цветами и логикой очков ***
     points.forEach((p, i) => {
-        ctx.fillStyle = p.type === "common" ? "#8B4513" : (p.type === "rare" ? "#3b82f6" : "#a855f7");
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-        ctx.fill();
+        
+        if (p.type === "rainbow") {
+            // Радужный градиент
+            let gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+            gradient.addColorStop(0, 'red');
+            gradient.addColorStop(0.2, 'orange');
+            gradient.addColorStop(0.4, 'yellow');
+            gradient.addColorStop(0.6, 'green');
+            gradient.addColorStop(0.8, 'blue');
+            gradient.addColorStop(1, 'violet');
+            ctx.fillStyle = gradient;
+            
+            // Добавим обводку, чтобы он сиял
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 3;
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+            ctx.fill();
+            ctx.stroke();
+        } else {
+            // Обычные цвета
+            if (p.type === "common") ctx.fillStyle = "#8B4513"; // Коричневый
+            else if (p.type === "rare") ctx.fillStyle = "#3b82f6"; // Синий
+            else if (p.type === "epic") ctx.fillStyle = "#a855f7"; // Фиолетовый
+            else if (p.type === "green") ctx.fillStyle = "#10b981"; // ЗЕЛЕНЫЙ (+5)
 
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        // Логика столкновения с едой
         if (Math.hypot(player.x - p.x, player.y - p.y) < player.r + p.r) {
-            if (p.type === "common") score++;
-            else if (p.type === "rare") { score++; slowTimer = 90; }
-            else score += 3;
+            // *** ИЗМЕНЕНО: Начисление очков для новых типов ***
+            if (p.type === "common") score += 1;
+            else if (p.type === "rare") { score += 1; slowTimer = 90; }
+            else if (p.type === "epic") score += 3;
+            else if (p.type === "green") score += 5;   // +5 ОЧКОВ
+            else if (p.type === "rainbow") score += 10; // +10 ОЧКОВ
+            
             document.getElementById("score").innerText = "Очки: " + score;
             points.splice(i, 1);
             spawnPoint();
@@ -155,6 +211,7 @@ function startGame() {
     points = [];
     slowTimer = 0;
     enemy.x = -100;
+    document.getElementById("score").innerText = "Очки: 0"; // Сброс счета визуально
     for(let i=0; i<6; i++) spawnPoint();
     running = true;
     update();
@@ -183,7 +240,6 @@ async function saveToSupabase(s) {
     if (!supabaseClient) return;
 
     try {
-        // получаем текущий рекорд игрока
         const { data, error } = await supabaseClient
             .from("leaderboard")
             .select("score")
@@ -196,12 +252,10 @@ async function saveToSupabase(s) {
         }
 
         if (!data) {
-            // игрока нет → создаём
             await supabaseClient
                 .from("leaderboard")
                 .insert([{ name: playerName, score: s }]);
         } else {
-            // есть игрок → обновляем только если лучше
             if (s > data.score) {
                 await supabaseClient
                     .from("leaderboard")
