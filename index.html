@@ -3,30 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <title>Побег от Наталии</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  body { margin: 0; overflow: hidden; background: #fff; font-family: Arial, sans-serif; color: #333; }
-  #lobby, #gameOver, #leaderboard {
-    position: fixed; inset: 0; background: rgba(255,255,255,0.96);
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    z-index: 10; gap: 20px;
-  }
-  #score { position: fixed; top: 15px; left: 15px; font-size: 26px; font-weight: bold; z-index: 100; }
-  button { padding: 14px 32px; font-size: 18px; border: none; border-radius: 10px; background: #ff4d94; color: white; cursor: pointer; }
-  button:hover { background: #ff3388; }
-  input { padding: 14px; width: 300px; font-size: 17px; border: 2px solid #ddd; border-radius: 10px; margin: 8px 0; box-sizing: border-box; }
+  body { margin: 0; overflow: hidden; background: #fff; font-family: Arial, sans-serif; }
+  #lobby, #gameOver, #leaderboard { position: fixed; inset: 0; background: rgba(255,255,255,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; gap: 15px; }
+  button { padding: 12px 30px; font-size: 18px; border: none; border-radius: 8px; background: #ff4d94; color: white; cursor: pointer; }
+  input { padding: 12px; width: 280px; margin: 8px 0; border-radius: 8px; border: 2px solid #ddd; }
   .hidden { display: none !important; }
-  h1 { color: #c026d3; margin: 0; }
-  #loginModal {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-    z-index: 20; display: flex; justify-content: center; align-items: center;
-  }
-  #loginBox {
-    background: white; padding: 35px; border-radius: 16px; width: 360px; text-align: center;
-  }
-  #lbTable { width: 85%; max-width: 600px; border-collapse: collapse; }
-  #lbTable th, #lbTable td { padding: 8px 12px; text-align: left; }
-  #lbTable tr:nth-child(odd) { background: #f9f9f9; }
 </style>
 </head>
 <body>
@@ -41,25 +23,28 @@
   <button onclick="showLoginModal()">👤 Войти / Регистрация</button>
 </div>
 
-<div id="loginModal" class="hidden">
-  <div id="loginBox">
+<!-- Login Modal -->
+<div id="loginModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:20;display:flex;justify-content:center;align-items:center;">
+  <div style="background:white;padding:30px;border-radius:12px;width:340px;text-align:center;">
     <h2>Вход / Регистрация</h2>
-    <input type="text" id="username" placeholder="Имя пользователя" maxlength="20"><br>
-    <input type="password" id="password" placeholder="Пароль" maxlength="20"><br>
-    <button onclick="handleAuth()" style="width:100%;margin:15px 0;">Войти / Зарегистрироваться</button>
+    <input type="text" id="username" placeholder="Имя пользователя"><br>
+    <input type="password" id="password" placeholder="Пароль"><br>
+    <button onclick="handleAuth()" style="width:100%;margin:10px 0;">Войти / Зарегистрироваться</button>
     <button onclick="closeLoginModal()" style="background:#666;width:100%;">Отмена</button>
   </div>
 </div>
 
+<!-- Leaderboard -->
 <div id="leaderboard" class="hidden">
   <h1>🏆 Таблица лидеров</h1>
-  <table id="lbTable"></table>
-  <button onclick="hideLeaderboard()" style="margin-top:20px;">Закрыть</button>
+  <table style="width:80%;max-width:500px;border-collapse:collapse;" id="lbTable"></table>
+  <button onclick="hideLeaderboard()">Закрыть</button>
 </div>
 
+<!-- Game Over -->
 <div id="gameOver" class="hidden">
   <h1>Тебя поймала Наталия 😈</h1>
-  <p id="finalScore" style="font-size:24px;"></p>
+  <p id="finalScore"></p>
   <button onclick="restart()">Играть снова</button>
   <button onclick="goToLobby()">В лобби</button>
 </div>
@@ -67,112 +52,103 @@
 <canvas id="game"></canvas>
 
 <script>
-/* ===================== SUPABASE ===================== */
-// FIX: правильный импорт из CDN — используем window.supabase
-const { createClient } = window.supabase;
-const sb = createClient(
-  'https://pdsbdrdfdqijamiedeit.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkc2JkcmRmZHFpamFtaWVkZWl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MTgxNDAsImV4cCI6MjA5MTM5NDE0MH0.3Q9oECjZmwtSTxp3DGL9jBl3bnuvRnsUt26Lf8S3aso' // замените на ваш anon key
-);
+// ================== НАСТРОЙКИ GITHUB ==================
+const GITHUB_REPO = "arbuz-kiber/makrame67";   // ← ИЗМЕНИ НА СВОЙ
+const GITHUB_TOKEN = "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";          // ← ВСТАВЬ СВОЙ ТОКЕН
+const FILE_USERS = "users.json";
+const FILE_LEADERBOARD = "leaderboard.json";
 
-/* ===================== GAME SETUP ===================== */
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const headers = {
+  "Authorization": `token ${GITHUB_TOKEN}`,
+  "Accept": "application/vnd.github.v3+json",
+  "Content-Type": "application/json"
+};
 
-let player, enemy, points = [], score = 0, running = false, slowTimer = 0;
-let animFrameId = null; // FIX: отслеживаем id анимации чтобы останавливать предыдущий loop
+// ================== ПЕРЕМЕННЫЕ ==================
 let currentUser = null;
+let canvas = document.getElementById("game");
+let ctx = canvas.getContext("2d");
+// ... (остальной код игры: player, enemy и т.д. можно оставить как раньше)
 
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+// ================== РАБОТА С GITHUB ==================
+async function getFile(path) {
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return JSON.parse(atob(data.content));
 }
-resize();
-window.addEventListener("resize", resize);
 
-/* ===================== IMAGES ===================== */
-const playerImg = new Image();
-playerImg.src = "https://cdn-icons-png.flaticon.com/512/1946/1946429.png";
+async function updateFile(path, content, message) {
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+  let sha = null;
 
-const enemyImg = new Image();
-enemyImg.src = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png";
+  const existing = await fetch(url, { headers });
+  if (existing.ok) {
+    const data = await existing.json();
+    sha = data.sha;
+  }
 
-/* ===================== AUTH ===================== */
+  const body = {
+    message: message,
+    content: btoa(JSON.stringify(content, null, 2)),
+    sha: sha
+  };
+
+  await fetch(url, { method: "PUT", headers, body: JSON.stringify(body) });
+}
+
+// ================== АВТОРИЗАЦИЯ ==================
 async function handleAuth() {
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value.trim();
 
-  if (!username || !password) { alert("Введите имя и пароль!"); return; }
+  if (!username || !password) return alert("Заполните все поля");
 
-  // FIX: сначала пробуем войти, если ошибка — регистрируем
-  const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({
-    email: username + "@game.local",
-    password
-  });
+  let users = await getFile(FILE_USERS) || {};
 
-  if (!signInError && signInData?.user) {
+  if (users[username]) {
+    if (users[username] === password) {
+      currentUser = { name: username };
+      document.getElementById("welcomeText").textContent = `Привет, ${username}!`;
+      alert("Вход выполнен успешно!");
+    } else {
+      return alert("Неверный пароль!");
+    }
+  } else {
+    users[username] = password;
+    await updateFile(FILE_USERS, users, `Add user: ${username}`);
     currentUser = { name: username };
-    document.getElementById("welcomeText").innerText = `Привет, ${username}!`;
-    closeLoginModal();
-    return;
+    document.getElementById("welcomeText").textContent = `Привет, ${username}!`;
+    alert("Аккаунт создан!");
   }
-
-  // Пробуем зарегистрировать
-  const { data: signUpData, error: signUpError } = await sb.auth.signUp({
-    email: username + "@game.local",
-    password,
-    options: { data: { username } }
-  });
-
-  if (signUpError) {
-    alert("Ошибка: " + signUpError.message);
-  } else if (signUpData?.user) {
-    // FIX: после регистрации сразу входим без лишнего alert
-    currentUser = { name: username };
-    document.getElementById("welcomeText").innerText = `Привет, ${username}!`;
-    closeLoginModal();
-  }
+  closeLoginModal();
 }
 
-function showLoginModal() {
-  document.getElementById("loginModal").classList.remove("hidden");
-}
-
-function closeLoginModal() {
-  document.getElementById("loginModal").classList.add("hidden");
-}
-
-/* ===================== LEADERBOARD ===================== */
-async function saveScore(finalScore) {
+// ================== ЛИДЕРБОРД ==================
+async function saveScore(score) {
   if (!currentUser) return;
-  // FIX: проверяем ошибку при сохранении
-  const { error } = await sb.from("scores").insert([
-    { username: currentUser.name, score: finalScore }
-  ]);
-  if (error) console.error("Ошибка сохранения очков:", error.message);
+  let lb = await getFile(FILE_LEADERBOARD) || [];
+  
+  const existing = lb.findIndex(item => item.name === currentUser.name);
+  if (existing !== -1) {
+    if (score > lb[existing].score) lb[existing].score = score;
+  } else {
+    lb.push({ name: currentUser.name, score: score });
+  }
+
+  lb.sort((a,b) => b.score - a.score);
+  await updateFile(FILE_LEADERBOARD, lb, `Update score: ${currentUser.name} - ${score}`);
 }
 
 async function showLeaderboard() {
+  const lb = await getFile(FILE_LEADERBOARD) || [];
   const table = document.getElementById("lbTable");
-  table.innerHTML = `<tr style="background:#f0f0f0"><th>Место</th><th>Игрок</th><th>Очки</th></tr>`;
+  table.innerHTML = `<tr><th>Место</th><th>Игрок</th><th>Рекорд</th></tr>`;
 
-  const { data, error } = await sb
-    .from("scores")
-    .select("username, score")
-    .order("score", { ascending: false })
-    .limit(20);
-
-  if (error) {
-    table.innerHTML += `<tr><td colspan="3" style="text-align:center;color:red;">Ошибка загрузки</td></tr>`;
-  } else {
-    (data || []).forEach((row, i) => {
-      table.innerHTML += `<tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${row.username}</td>
-        <td style="text-align:center;font-weight:bold">${row.score}</td>
-      </tr>`;
-    });
-  }
+  lb.forEach((entry, i) => {
+    table.innerHTML += `<tr><td>${i+1}</td><td>${entry.name}</td><td>${entry.score}</td></tr>`;
+  });
 
   document.getElementById("leaderboard").classList.remove("hidden");
 }
@@ -181,124 +157,12 @@ function hideLeaderboard() {
   document.getElementById("leaderboard").classList.add("hidden");
 }
 
-/* ===================== GAME ===================== */
-function init() {
-  // FIX: останавливаем предыдущий цикл анимации перед новой игрой
-  if (animFrameId) {
-    cancelAnimationFrame(animFrameId);
-    animFrameId = null;
-  }
+// ================== ОСТАЛЬНОЙ КОД ИГРЫ (init, update и т.д.) ==================
+// ... вставь сюда весь код игры из предыдущей версии (init, update, spawnPoint и т.д.)
 
-  player = { x: canvas.width / 2, y: canvas.height / 2 };
-  enemy = { x: 100, y: 100, r: 35, baseSpeed: 2.3, speed: 2.3 };
-
-  points = [];
-  score = 0;
-  running = true;
-  slowTimer = 0;
-
-  document.getElementById("score").classList.remove("hidden");
-  document.getElementById("score").innerText = "Очки: 0";
-  document.getElementById("gameOver").classList.add("hidden");
-
-  for (let i = 0; i < 6; i++) spawnPoint();
-}
-
-function spawnPoint() {
-  const rand = Math.random();
-  const type = rand < 0.7 ? "common" : rand < 0.9 ? "rare" : "epic";
-  points.push({
-    x: Math.random() * (canvas.width - 40) + 20,
-    y: Math.random() * (canvas.height - 40) + 20,
-    r: 18,
-    type
-  });
-}
-
-function move(e) {
-  // FIX: preventDefault только для touch, чтобы не мешать скроллу на мобиле
-  if (e.touches) e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const x = e.touches ? e.touches[0].clientX : e.clientX;
-  const y = e.touches ? e.touches[0].clientY : e.clientY;
-  player.x = x - rect.left;
-  player.y = y - rect.top;
-}
-
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("touchmove", move, { passive: false });
-
-function dist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function drawPoint(p) {
-  ctx.fillStyle =
-    p.type === "common" ? "#8B4513" :
-    p.type === "rare"   ? "#3b82f6" : "#a855f7";
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function update() {
-  if (!running) return;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Скорость врага
-  if (slowTimer > 0) {
-    slowTimer--;
-    enemy.speed = enemy.baseSpeed * 0.5;
-  } else {
-    enemy.speed = enemy.baseSpeed + score * 0.02;
-  }
-
-  // Движение врага к игроку
-  const dx = player.x - enemy.x;
-  const dy = player.y - enemy.y;
-  const d = Math.hypot(dx, dy) || 1;
-  enemy.x += (dx / d) * enemy.speed;
-  enemy.y += (dy / d) * enemy.speed;
-
-  // Рисуем игрока
-  ctx.drawImage(playerImg, player.x - 25, player.y - 25, 50, 50);
-
-  // Рисуем врага
-  ctx.drawImage(enemyImg, enemy.x - 25, enemy.y - 25, 50, 50);
-
-  // Очки
-  for (let i = points.length - 1; i >= 0; i--) {
-    const p = points[i];
-    drawPoint(p);
-
-    if (dist(player, p) < 40) {
-      if (p.type === "epic")       score += 5;
-      else if (p.type === "rare")  { score += 2; slowTimer = 100; } // FIX: rare даёт 2 очка + замедление
-      else                         score += 1;
-
-      document.getElementById("score").innerText = "Очки: " + score;
-      points.splice(i, 1);
-      spawnPoint();
-    }
-  }
-
-  // Столкновение с врагом
-  if (dist(player, enemy) < 50) {
-    running = false;
-    document.getElementById("finalScore").innerText = `Твой рекорд: ${score}`;
-    document.getElementById("gameOver").classList.remove("hidden");
-    if (currentUser) saveScore(score);
-    return; // FIX: прерываем цикл — не запрашиваем новый кадр
-  }
-
-  animFrameId = requestAnimationFrame(update);
-}
-
-/* ===================== УПРАВЛЕНИЕ ===================== */
 function startGame() {
   if (!currentUser) {
-    alert("Сначала войдите!");
+    alert("Сначала войдите в аккаунт!");
     showLoginModal();
     return;
   }
@@ -307,21 +171,11 @@ function startGame() {
   update();
 }
 
-function restart() {
-  init();
-  update();
-}
+// В конце функции поражения (где game over):
+// if (currentUser) await saveScore(score);
 
-function goToLobby() {
-  running = false;
-  if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-  document.getElementById("gameOver").classList.add("hidden");
-  document.getElementById("lobby").classList.remove("hidden");
-  document.getElementById("score").classList.add("hidden");
-}
-
-/* INIT */
-document.getElementById("lobby").classList.remove("hidden");
+// Запуск
+loadUser(); // если хочешь localStorage как резерв
 </script>
 </body>
 </html>
