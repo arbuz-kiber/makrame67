@@ -1,296 +1,257 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>Побег от Наталии</title>
-<style>
-  body { margin: 0; overflow: hidden; background: #ffffff; font-family: Arial; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Побег от Наталии</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
+        canvas { display: block; touch-action: none; }
 
-  #score {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    font-size: 20px;
-    z-index: 2;
-  }
+        #score {
+            position: fixed;
+            top: env(safe-area-inset-top, 10px);
+            left: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 2;
+            pointer-events: none;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
+        }
 
-  /* ===== МЕНЮ ===== */
-  #menu {
-    position: fixed;
-    inset: 0;
-    background: rgba(255,255,255,0.95);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 12px;
-    z-index: 10;
-  }
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            z-index: 10;
+            padding: 20px;
+            text-align: center;
+        }
 
-  /* ===== GAME OVER ===== */
-  #gameOver {
-    position: fixed;
-    inset: 0;
-    background: rgba(255,255,255,0.9);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    z-index: 3;
-  }
+        button {
+            padding: 15px 30px;
+            font-size: 20px;
+            cursor: pointer;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 10px;
+            width: 250px;
+            max-width: 80%;
+        }
 
-  button {
-    padding: 10px 20px;
-    font-size: 18px;
-    cursor: pointer;
-  }
-
-  input {
-    padding: 10px;
-    font-size: 16px;
-  }
-</style>
+        input {
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            width: 250px;
+            max-width: 80%;
+            outline: none;
+        }
+    </style>
 </head>
 <body>
 
 <div id="score">Очки: 0</div>
 
-<!-- ===== МЕНЮ ===== -->
-<div id="menu">
-  <h1>Побег от Наталии 😈</h1>
-
-  <input id="nameInput" placeholder="Введите имя">
-
-  <button onclick="startGame()">Играть</button>
-  <button onclick="showLeaderboard()">🏆 Лидеры</button>
+<div id="menu" class="overlay">
+    <h1>Побег от Наталии 😈</h1>
+    <input id="nameInput" placeholder="Введите имя" maxlength="15">
+    <button onclick="startGame()">Играть</button>
+    <button onclick="showLeaderboard()" style="background:#6c757d">🏆 Лидеры</button>
 </div>
 
-<!-- ===== GAME OVER ===== -->
-<div id="gameOver">
-  <h1>Тебя поймала Наталия 😈</h1>
-  <p id="finalScore"></p>
-
-  <button onclick="backToMenu()">В меню</button>
-  <button onclick="restart()">Играть снова</button>
+<div id="gameOver" class="overlay" style="display: none;">
+    <h1>Тебя поймали! 😈</h1>
+    <p id="finalScore" style="font-size: 24px;"></p>
+    <button onclick="restart()">Играть снова</button>
+    <button onclick="backToMenu()" style="background:#6c757d">В меню</button>
 </div>
 
 <canvas id="game"></canvas>
 
 <script>
-
+// --- Конфигурация ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-resize();
-window.addEventListener("resize", resize);
-
-// ================== РЕКОРДЫ ==================
 let playerName = "";
 let score = 0;
 let running = false;
+let animationId;
 
-function getLB() {
-  return JSON.parse(localStorage.getItem("lb") || "[]");
+// Адаптивные радиусы
+const getBaseSize = () => Math.min(window.innerWidth, window.innerHeight);
+let pRadius, eRadius, itemRadius;
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const base = getBaseSize();
+    pRadius = base * 0.05; // 5% от экрана
+    eRadius = base * 0.07; // 7% от экрана
+    itemRadius = base * 0.035;
+    if (player) player.r = pRadius;
+    if (enemy) enemy.r = eRadius;
 }
 
-function saveScore(score) {
-  if (!playerName) return;
-
-  let lb = getLB();
-  let user = lb.find(u => u.name === playerName);
-
-  if (user) {
-    if (score > user.score) user.score = score;
-  } else {
-    lb.push({ name: playerName, score });
-  }
-
-  lb.sort((a,b) => b.score - a.score);
-  localStorage.setItem("lb", JSON.stringify(lb));
-}
-
-function showLeaderboard() {
-  let lb = getLB();
-
-  alert(
-    "🏆 РЕКОРДЫ:\n\n" +
-    lb.map((p,i)=>`${i+1}. ${p.name} — ${p.score}`).join("\n")
-  );
-}
-
-// ================== КАРТИНКИ ==================
-let imagesLoaded = 0;
-const totalImages = 2;
-
+// --- Ресурсы ---
 const playerImg = new Image();
 playerImg.src = "https://cdn-icons-png.flaticon.com/512/1946/1946429.png";
-playerImg.onload = () => imagesLoaded++;
-
 const enemyImg = new Image();
-enemyImg.src = "natalia.jpg";
-enemyImg.onload = () => imagesLoaded++;
-enemyImg.onerror = () => {
-  enemyImg.src = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png";
-};
+enemyImg.src = "natalia.jpg"; // Запасной вариант сразу
 
-// ================== ИГРА ==================
-let player, enemy, points, slowTimer;
-
-function init() {
-  player = { x: canvas.width/2, y: canvas.height/2, r: 25 };
-  enemy = { x: 100, y: 100, r: 35, baseSpeed: 2, speed: 2 };
-  points = [];
-  score = 0;
-  running = true;
-  slowTimer = 0;
-
-  document.getElementById("score").innerText = "Очки: 0";
-  document.getElementById("gameOver").style.display = "none";
-
-  for(let i = 0; i < 6; i++) spawnPoint();
-}
+// --- Игровая логика ---
+let player = { x: 0, y: 0, r: 25 };
+let enemy = { x: -100, y: -100, r: 35, speed: 2 };
+let points = [];
+let slowTimer = 0;
 
 function spawnPoint() {
-  let rand = Math.random();
-  let type;
-
-  if (rand < 0.7) type = "common";
-  else if (rand < 0.9) type = "rare";
-  else type = "epic";
-
-  points.push({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
-    r: 18,
-    type
-  });
+    let rand = Math.random();
+    let type = rand < 0.7 ? "common" : (rand < 0.9 ? "rare" : "epic");
+    points.push({
+        x: Math.random() * (canvas.width - 40) + 20,
+        y: Math.random() * (canvas.height - 40) + 20,
+        r: itemRadius,
+        type
+    });
 }
 
-// управление (НЕ ТРОГАЛ)
-function move(e) {
-  let rect = canvas.getBoundingClientRect();
-  let x = e.touches ? e.touches[0].clientX : e.clientX;
-  let y = e.touches ? e.touches[0].clientY : e.clientY;
-
-  player.x = x - rect.left;
-  player.y = y - rect.top;
+function handleInput(e) {
+    if (!running) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    // Плавное следование за пальцем/курсором
+    player.x = clientX;
+    player.y = clientY;
+    
+    if (e.cancelable) e.preventDefault();
 }
 
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("touchmove", move, { passive: false });
+window.addEventListener("mousemove", handleInput);
+window.addEventListener("touchmove", handleInput, { passive: false });
+window.addEventListener("resize", resize);
 
-function dist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function drawYarn(p) {
-  if (p.type === "common") ctx.fillStyle = "#8B4513";
-  if (p.type === "rare") ctx.fillStyle = "#3b82f6";
-  if (p.type === "epic") ctx.fillStyle = "#a855f7";
-
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  ctx.fill();
+function init() {
+    resize();
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
+    enemy.x = 0;
+    enemy.y = 0;
+    points = [];
+    score = 0;
+    slowTimer = 0;
+    running = true;
+    for (let i = 0; i < 6; i++) spawnPoint();
+    document.getElementById("score").innerText = "Очки: 0";
 }
 
 function update() {
-  if (!running) return;
+    if (!running) return;
 
-  if (imagesLoaded < totalImages) {
-    requestAnimationFrame(update);
-    return;
-  }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+    // Логика врага (зависит от очков и замедления)
+    let currentSpeed = (slowTimer > 0) ? 1.5 : (2 + score * 0.15);
+    if (slowTimer > 0) slowTimer--;
 
-  // скорость врага
-  if (slowTimer > 0) {
-    slowTimer--;
-    enemy.speed = enemy.baseSpeed * 0.5;
-  } else {
-    enemy.speed = enemy.baseSpeed + score * 0.25;
-  }
+    let dx = player.x - enemy.x;
+    let dy = player.y - enemy.y;
+    let d = Math.hypot(dx, dy);
 
-  let dx = player.x - enemy.x;
-  let dy = player.y - enemy.y;
-  let d = Math.hypot(dx, dy);
-
-  if (d > 0) {
-    enemy.x += dx / d * enemy.speed;
-    enemy.y += dy / d * enemy.speed;
-  }
-
-  ctx.drawImage(playerImg, player.x - player.r, player.y - player.r, player.r*2, player.r*2);
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI*2);
-  ctx.clip();
-
-  ctx.drawImage(enemyImg, enemy.x - enemy.r, enemy.y - enemy.r, enemy.r*2, enemy.r*2);
-
-  ctx.restore();
-
-  points.forEach((p,i)=>{
-    drawYarn(p);
-
-    if (dist(player,p) < player.r + p.r) {
-      if (p.type === "common") score++;
-      if (p.type === "rare") { score++; slowTimer = 90; }
-      if (p.type === "epic") score += 3;
-
-      document.getElementById("score").innerText = "Очки: " + score;
-
-      points.splice(i,1);
-      spawnPoint();
+    if (d > 1) {
+        enemy.x += (dx / d) * currentSpeed;
+        enemy.y += (dy / d) * currentSpeed;
     }
-  });
 
-  if (dist(player, enemy) < player.r + enemy.r) {
-    running = false;
+    // Отрисовка еды
+    points.forEach((p, i) => {
+        ctx.fillStyle = p.type === "common" ? "#8B4513" : (p.type === "rare" ? "#3b82f6" : "#a855f7");
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
 
-    saveScore(score);
+        if (Math.hypot(player.x - p.x, player.y - p.y) < player.r + p.r) {
+            if (p.type === "common") score++;
+            else if (p.type === "rare") { score++; slowTimer = 120; }
+            else score += 3;
+            
+            document.getElementById("score").innerText = "Очки: " + score;
+            points.splice(i, 1);
+            spawnPoint();
+        }
+    });
 
-    document.getElementById("finalScore").innerText = "Очки: " + score;
-    document.getElementById("gameOver").style.display = "flex";
-  }
+    // Отрисовка игрока
+    ctx.drawImage(playerImg, player.x - player.r, player.y - player.r, player.r * 2, player.r * 2);
 
-  requestAnimationFrame(update);
+    // Отрисовка врага (круглый)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(enemyImg, enemy.x - enemy.r, enemy.y - enemy.r, enemy.r * 2, enemy.r * 2);
+    ctx.restore();
+
+    // Столкновение с врагом
+    if (d < player.r + enemy.r) {
+        gameOver();
+    } else {
+        animationId = requestAnimationFrame(update);
+    }
 }
 
-// ================== МЕНЮ ==================
+// --- Управление интерфейсом ---
 function startGame() {
-  playerName = document.getElementById("nameInput").value.trim();
-
-  if (!playerName) {
-    alert("Введите имя!");
-    return;
-  }
-
-  document.getElementById("menu").style.display = "none";
-
-  init();
-  update();
+    const input = document.getElementById("nameInput");
+    playerName = input.value.trim();
+    if (!playerName) return alert("Введите имя!");
+    
+    document.getElementById("menu").style.display = "none";
+    init();
+    cancelAnimationFrame(animationId);
+    update();
 }
 
-function backToMenu() {
-  document.getElementById("gameOver").style.display = "none";
-  document.getElementById("menu").style.display = "flex";
+function gameOver() {
+    running = false;
+    saveScore(score);
+    document.getElementById("finalScore").innerText = "Твой результат: " + score;
+    document.getElementById("gameOver").style.display = "flex";
 }
 
 function restart() {
-  init();
-  update();
+    document.getElementById("gameOver").style.display = "none";
+    init();
+    cancelAnimationFrame(animationId);
+    update();
 }
 
-// старт
-update();
+function backToMenu() {
+    document.getElementById("gameOver").style.display = "none";
+    document.getElementById("menu").style.display = "flex";
+}
 
+// Функции рекордов (LocalStorage)
+function saveScore(s) {
+    let lb = JSON.parse(localStorage.getItem("lb") || "[]");
+    lb.push({ name: playerName, score: s });
+    lb.sort((a, b) => b.score - a.score);
+    localStorage.setItem("lb", JSON.stringify(lb.slice(0, 10)));
+}
+
+function showLeaderboard() {
+    let lb = JSON.parse(localStorage.getItem("lb") || "[]");
+    alert("🏆 ТОП-10:\n" + lb.map((p, i) => `${i + 1}. ${p.name}: ${p.score}`).join("\n"));
+}
 </script>
-
 </body>
 </html>
