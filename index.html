@@ -19,7 +19,6 @@
 
 <div id="score" class="hidden">Очки: 0</div>
 
-<!-- ЛОББИ -->
 <div id="lobby">
   <h1>Побег от Наталии 😈</h1>
   <p id="welcomeText">Добро пожаловать!</p>
@@ -28,7 +27,6 @@
   <button onclick="showLoginModal()">👤 Войти / Регистрация</button>
 </div>
 
-<!-- МОДАЛКА ВХОДА -->
 <div id="loginModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:20;display:flex;justify-content:center;align-items:center;">
   <div style="background:white;padding:35px;border-radius:16px;width:360px;text-align:center;">
     <h2>Вход / Регистрация</h2>
@@ -39,14 +37,12 @@
   </div>
 </div>
 
-<!-- ТАБЛИЦА ЛИДЕРОВ -->
 <div id="leaderboard" class="hidden">
   <h1>🏆 Таблица лидеров</h1>
   <table style="width:85%;max-width:600px;border-collapse:collapse;" id="lbTable"></table>
   <button onclick="hideLeaderboard()" style="margin-top:20px;">Закрыть</button>
 </div>
 
-<!-- GAME OVER -->
 <div id="gameOver" class="hidden">
   <h1>Тебя поймала Наталия 😈</h1>
   <p id="finalScore" style="font-size:24px;"></p>
@@ -57,16 +53,16 @@
 <canvas id="game"></canvas>
 
 <script>
-// ================== SUPABASE НАСТРОЙКИ ==================
-const supabaseUrl = 'https://pdsbdrdfdqijamiedeit.supabase.co';        // ← ВСТАВЬ СЮДА
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkc2JkcmRmZHFpamFtaWVkZWl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MTgxNDAsImV4cCI6MjA5MTM5NDE0MH0.3Q9oECjZmwtSTxp3DGL9jBl3bnuvRnsUt26Lf8S3aso';            // ← ВСТАВЬ СЮДА
+// ================== SUPABASE ==================
+const supabaseUrl = 'https://pdsbdrdfdqijamiedeit.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkc2JkcmRmZHFpamFtaWVkZWl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MTgxNDAsImV4cCI6MjA5MTM5NDE0MH0.3Q9oECjZmwtSTxp3DGL9jBl3bnuvRnsUt26Lf8S3aso';
 
 const supabase = Supabase.createClient(supabaseUrl, supabaseKey);
 
 // ================== ПЕРЕМЕННЫЕ ИГРЫ ==================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-let player, enemy, points, score, running, slowTimer;
+let player, enemy, points, score = 0, running = false, slowTimer = 0;
 let currentUser = null;
 
 function resize() {
@@ -76,42 +72,32 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
-// Загрузка изображений
+// Изображения
 let imagesLoaded = 0;
-const playerImg = new Image();
-playerImg.src = "https://cdn-icons-png.flaticon.com/512/1946/1946429.png";
-const enemyImg = new Image();
-enemyImg.src = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png"; // запасной
+const playerImg = new Image(); playerImg.src = "https://cdn-icons-png.flaticon.com/512/1946/1946429.png";
+const enemyImg = new Image(); enemyImg.src = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png";
 playerImg.onload = enemyImg.onload = () => imagesLoaded++;
 
 // ================== АВТОРИЗАЦИЯ ==================
 async function handleAuth() {
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value.trim();
-
   if (!username || !password) return alert("Введите имя и пароль!");
 
-  // Пытаемся войти
   let { data, error } = await supabase.auth.signInWithPassword({
     email: username + "@natalia.game",
     password: password
   });
 
   if (error) {
-    // Если не получилось — регистрируем
     const { error: signUpError } = await supabase.auth.signUp({
       email: username + "@natalia.game",
       password: password,
-      options: { data: { username: username } }
+      options: { data: { username } }
     });
-
-    if (signUpError) {
-      alert("Ошибка: " + signUpError.message);
-      return;
-    } else {
-      alert("Аккаунт создан! Теперь войдите.");
-      return;
-    }
+    if (signUpError) alert("Ошибка: " + signUpError.message);
+    else alert("Аккаунт создан!\nТеперь введите те же данные и нажмите кнопку снова.");
+    return;
   }
 
   currentUser = { name: username };
@@ -120,50 +106,29 @@ async function handleAuth() {
   closeLoginModal();
 }
 
-function showLoginModal() {
-  document.getElementById("loginModal").classList.remove("hidden");
-}
-function closeLoginModal() {
-  document.getElementById("loginModal").classList.add("hidden");
-}
+function showLoginModal() { document.getElementById("loginModal").classList.remove("hidden"); }
+function closeLoginModal() { document.getElementById("loginModal").classList.add("hidden"); }
 
 // ================== ЛИДЕРБОРД ==================
 async function saveScore(finalScore) {
   if (!currentUser) return;
-  
-  const { error } = await supabase
-    .from('scores')
-    .insert([{ username: currentUser.name, score: finalScore }]);
-
-  if (error) console.error("Ошибка сохранения:", error);
+  await supabase.from('scores').insert([{ username: currentUser.name, score: finalScore }]);
 }
 
 async function showLeaderboard() {
-  const { data, error } = await supabase
-    .from('scores')
-    .select('username, score')
-    .order('score', { ascending: false })
-    .limit(20);
-
+  const { data } = await supabase.from('scores').select('username, score').order('score', { ascending: false }).limit(20);
+  
   const table = document.getElementById("lbTable");
   table.innerHTML = `<tr style="background:#f0f0f0"><th>Место</th><th>Игрок</th><th>Рекорд</th></tr>`;
-
   if (data) {
     data.forEach((row, i) => {
-      table.innerHTML += `
-        <tr>
-          <td style="padding:12px;text-align:center">${i+1}</td>
-          <td style="padding:12px">${row.username}</td>
-          <td style="padding:12px;text-align:center;font-weight:bold">${row.score}</td>
-        </tr>`;
+      table.innerHTML += `<tr><td style="padding:12px;text-align:center">${i+1}</td><td style="padding:12px">${row.username}</td><td style="padding:12px;text-align:center;font-weight:bold">${row.score}</td></tr>`;
     });
   }
   document.getElementById("leaderboard").classList.remove("hidden");
 }
 
-function hideLeaderboard() {
-  document.getElementById("leaderboard").classList.add("hidden");
-}
+function hideLeaderboard() { document.getElementById("leaderboard").classList.add("hidden"); }
 
 // ================== ИГРА ==================
 function init() {
@@ -173,11 +138,9 @@ function init() {
   score = 0;
   running = true;
   slowTimer = 0;
-
   document.getElementById("score").classList.remove("hidden");
   document.getElementById("score").innerText = "Очки: 0";
   document.getElementById("gameOver").classList.add("hidden");
-
   for(let i = 0; i < 6; i++) spawnPoint();
 }
 
@@ -208,7 +171,7 @@ function drawYarn(p) {
 }
 
 function update() {
-  if (imagesLoaded < 2 || !running) { requestAnimationFrame(update); return; }
+  if (imagesLoaded < 2 || !running) return requestAnimationFrame(update);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -221,31 +184,25 @@ function update() {
   enemy.x += (dx / d) * enemy.speed;
   enemy.y += (dy / d) * enemy.speed;
 
-  // Игрок
   ctx.drawImage(playerImg, player.x-25, player.y-25, 50, 50);
 
-  // Наталия
   ctx.save();
   ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI*2); ctx.clip();
   ctx.drawImage(enemyImg, enemy.x-enemy.r, enemy.y-enemy.r, enemy.r*2, enemy.r*2);
   ctx.restore();
 
-  // Клубки
   for (let i = points.length-1; i >= 0; i--) {
     const p = points[i];
     drawYarn(p);
     if (dist(player, p) < 43) {
-      if (p.type === "common") score += 1;
-      else if (p.type === "rare") { score += 1; slowTimer = 110; }
-      else score += 4 + Math.floor(Math.random()*3);
-
+      score += p.type === "common" ? 1 : p.type === "rare" ? 1 : 5;
+      if (p.type === "rare") slowTimer = 110;
       document.getElementById("score").innerText = "Очки: " + score;
       points.splice(i, 1);
       spawnPoint();
     }
   }
 
-  // Поражение
   if (dist(player, enemy) < 58) {
     running = false;
     document.getElementById("finalScore").innerText = `Твой рекорд: ${score} очков`;
@@ -279,7 +236,7 @@ function goToLobby() {
   document.getElementById("score").classList.add("hidden");
 }
 
-// Запуск
+// Запуск лобби
 document.getElementById("lobby").classList.remove("hidden");
 </script>
 </body>
