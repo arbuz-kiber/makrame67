@@ -4,185 +4,83 @@
 <meta charset="UTF-8">
 <title>Побег от Наталии</title>
 <style>
-  body { margin: 0; overflow: hidden; background: #fff; font-family: Arial, sans-serif; color: #333; }
-  #lobby, #gameOver, #leaderboard { 
-    position: fixed; inset: 0; background: rgba(255,255,255,0.97); 
-    display: flex; flex-direction: column; justify-content: center; align-items: center; 
-    z-index: 10; gap: 15px; 
+  body { margin: 0; overflow: hidden; background: #ffffff; font-family: Arial; }
+
+  #score {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    font-size: 20px;
+    z-index: 2;
   }
-  button { padding: 12px 30px; font-size: 18px; border: none; border-radius: 8px; background: #ff4d94; color: white; cursor: pointer; }
-  button:hover { background: #ff3388; }
-  input { padding: 12px; width: 280px; margin: 8px 0; border-radius: 8px; border: 2px solid #ddd; font-size: 16px; }
-  .hidden { display: none !important; }
-  table { border-collapse: collapse; width: 80%; max-width: 500px; }
-  th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+
+  /* ===== МЕНЮ ===== */
+  #menu {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.95);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    z-index: 10;
+  }
+
+  /* ===== GAME OVER ===== */
+  #gameOver {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.9);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    z-index: 3;
+  }
+
+  button {
+    padding: 10px 20px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  input {
+    padding: 10px;
+    font-size: 16px;
+  }
 </style>
 </head>
 <body>
 
-<div id="score" class="hidden">Очки: 0</div>
+<div id="score">Очки: 0</div>
 
-<div id="lobby">
+<!-- ===== МЕНЮ ===== -->
+<div id="menu">
   <h1>Побег от Наталии 😈</h1>
-  <p id="welcomeText">Добро пожаловать!</p>
-  <button onclick="startGame()">▶ Играть</button>
-  <button onclick="showLeaderboard()">🏆 Таблица лидеров</button>
-  <button onclick="showLoginModal()">👤 Войти / Регистрация</button>
+
+  <input id="nameInput" placeholder="Введите имя">
+
+  <button onclick="startGame()">Играть</button>
+  <button onclick="showLeaderboard()">🏆 Лидеры</button>
 </div>
 
-<!-- Login Modal -->
-<div id="loginModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:20;display:flex;justify-content:center;align-items:center;">
-  <div style="background:white;padding:30px;border-radius:12px;width:340px;text-align:center;">
-    <h2>Вход / Регистрация</h2>
-    <input type="text" id="username" placeholder="Имя пользователя"><br>
-    <input type="password" id="password" placeholder="Пароль"><br>
-    <button onclick="handleAuth()" style="width:100%;margin:10px 0;">Войти / Зарегистрироваться</button>
-    <button onclick="closeLoginModal()" style="background:#666;width:100%;">Отмена</button>
-  </div>
-</div>
-
-<!-- Leaderboard -->
-<div id="leaderboard" class="hidden">
-  <h1>🏆 Таблица лидеров</h1>
-  <table id="lbTable"></table>
-  <button onclick="hideLeaderboard()" style="margin-top:20px;">Закрыть</button>
-</div>
-
-<!-- Game Over -->
-<div id="gameOver" class="hidden">
+<!-- ===== GAME OVER ===== -->
+<div id="gameOver">
   <h1>Тебя поймала Наталия 😈</h1>
   <p id="finalScore"></p>
+
+  <button onclick="backToMenu()">В меню</button>
   <button onclick="restart()">Играть снова</button>
-  <button onclick="goToLobby()">В лобби</button>
 </div>
 
 <canvas id="game"></canvas>
 
 <script>
-// ================== GITHUB НАСТРОЙКИ ==================
-const GITHUB_REPO = "arbuz-kiber/makrame67";     // ← твой репозиторий
-const GITHUB_TOKEN = "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";      // ← ВСТАВЬ СВОЙ ТОКЕН!!!
 
-const headers = {
-  "Authorization": `token ${GITHUB_TOKEN}`,
-  "Accept": "application/vnd.github.v3+json",
-  "Content-Type": "application/json"
-};
-
-// ================== ПЕРЕМЕННЫЕ ИГРЫ ==================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-let player, enemy, points, score, running, slowTimer;
-let currentUser = null;
-let imagesLoaded = 0;
 
-// ================== GITHUB ФУНКЦИИ ==================
-async function getFile(path) {
-  try {
-    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
-    const res = await fetch(url, { headers });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error("GitHub error");
-    const data = await res.json();
-    return JSON.parse(atob(data.content));
-  } catch(e) {
-    console.error("Ошибка чтения файла:", e);
-    return null;
-  }
-}
-
-async function updateFile(path, content, message) {
-  try {
-    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
-    let sha = null;
-
-    const existing = await fetch(url, { headers });
-    if (existing.ok) {
-      const data = await existing.json();
-      sha = data.sha;
-    }
-
-    const body = {
-      message: message,
-      content: btoa(JSON.stringify(content, null, 2)),
-      sha: sha
-    };
-
-    await fetch(url, { method: "PUT", headers, body: JSON.stringify(body) });
-  } catch(e) {
-    console.error("Ошибка записи файла:", e);
-    alert("Не удалось сохранить на GitHub. Проверь токен!");
-  }
-}
-
-// ================== АВТОРИЗАЦИЯ ==================
-async function handleAuth() {
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value.trim();
-
-  if (!username || !password) return alert("Заполните имя и пароль");
-
-  let users = await getFile("users.json") || {};
-
-  if (users[username]) {
-    if (users[username] === password) {
-      currentUser = { name: username };
-      document.getElementById("welcomeText").textContent = `Привет, ${username}!`;
-      alert("✅ Вход выполнен!");
-    } else {
-      return alert("❌ Неверный пароль!");
-    }
-  } else {
-    users[username] = password;
-    await updateFile("users.json", users, `Add user: ${username}`);
-    currentUser = { name: username };
-    document.getElementById("welcomeText").textContent = `Привет, ${username}!`;
-    alert("✅ Аккаунт создан!");
-  }
-  closeLoginModal();
-}
-
-function showLoginModal() {
-  document.getElementById("loginModal").classList.remove("hidden");
-}
-
-function closeLoginModal() {
-  document.getElementById("loginModal").classList.add("hidden");
-}
-
-// ================== ЛИДЕРБОРД ==================
-async function saveScore(newScore) {
-  if (!currentUser) return;
-  let lb = await getFile("leaderboard.json") || [];
-  
-  const index = lb.findIndex(item => item.name === currentUser.name);
-  if (index !== -1) {
-    if (newScore > lb[index].score) lb[index].score = newScore;
-  } else {
-    lb.push({ name: currentUser.name, score: newScore });
-  }
-
-  lb.sort((a,b) => b.score - a.score);
-  await updateFile("leaderboard.json", lb, `Update score: ${currentUser.name}`);
-}
-
-async function showLeaderboard() {
-  const lb = await getFile("leaderboard.json") || [];
-  const table = document.getElementById("lbTable");
-  table.innerHTML = `<tr><th>Место</th><th>Игрок</th><th>Рекорд</th></tr>`;
-
-  lb.forEach((entry, i) => {
-    table.innerHTML += `<tr><td>${i+1}</td><td>${entry.name}</td><td style="text-align:center">${entry.score}</td></tr>`;
-  });
-
-  document.getElementById("leaderboard").classList.remove("hidden");
-}
-
-function hideLeaderboard() {
-  document.getElementById("leaderboard").classList.add("hidden");
-}
-
-// ================== ИГРА ==================
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -190,133 +88,209 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
+// ================== РЕКОРДЫ ==================
+let playerName = "";
+let score = 0;
+let running = false;
+
+function getLB() {
+  return JSON.parse(localStorage.getItem("lb") || "[]");
+}
+
+function saveScore(score) {
+  if (!playerName) return;
+
+  let lb = getLB();
+  let user = lb.find(u => u.name === playerName);
+
+  if (user) {
+    if (score > user.score) user.score = score;
+  } else {
+    lb.push({ name: playerName, score });
+  }
+
+  lb.sort((a,b) => b.score - a.score);
+  localStorage.setItem("lb", JSON.stringify(lb));
+}
+
+function showLeaderboard() {
+  let lb = getLB();
+
+  alert(
+    "🏆 РЕКОРДЫ:\n\n" +
+    lb.map((p,i)=>`${i+1}. ${p.name} — ${p.score}`).join("\n")
+  );
+}
+
+// ================== КАРТИНКИ ==================
+let imagesLoaded = 0;
+const totalImages = 2;
+
 const playerImg = new Image();
 playerImg.src = "https://cdn-icons-png.flaticon.com/512/1946/1946429.png";
 playerImg.onload = () => imagesLoaded++;
 
 const enemyImg = new Image();
-enemyImg.src = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png";
+enemyImg.src = "natalia.jpg";
 enemyImg.onload = () => imagesLoaded++;
+enemyImg.onerror = () => {
+  enemyImg.src = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png";
+};
+
+// ================== ИГРА ==================
+let player, enemy, points, slowTimer;
 
 function init() {
   player = { x: canvas.width/2, y: canvas.height/2, r: 25 };
-  enemy = { x: 100, y: 100, r: 35, baseSpeed: 2.2, speed: 2.2 };
+  enemy = { x: 100, y: 100, r: 35, baseSpeed: 2, speed: 2 };
   points = [];
   score = 0;
   running = true;
   slowTimer = 0;
 
-  document.getElementById("score").classList.remove("hidden");
   document.getElementById("score").innerText = "Очки: 0";
-  document.getElementById("gameOver").classList.add("hidden");
+  document.getElementById("gameOver").style.display = "none";
 
   for(let i = 0; i < 6; i++) spawnPoint();
 }
 
 function spawnPoint() {
   let rand = Math.random();
-  let type = rand < 0.7 ? "common" : rand < 0.9 ? "rare" : "epic";
+  let type;
+
+  if (rand < 0.7) type = "common";
+  else if (rand < 0.9) type = "rare";
+  else type = "epic";
+
   points.push({
     x: Math.random() * canvas.width,
     y: Math.random() * canvas.height,
     r: 18,
-    type: type
+    type
   });
 }
 
+// управление (НЕ ТРОГАЛ)
 function move(e) {
   let rect = canvas.getBoundingClientRect();
   let x = e.touches ? e.touches[0].clientX : e.clientX;
   let y = e.touches ? e.touches[0].clientY : e.clientY;
-  player.x = Math.max(25, Math.min(canvas.width-25, x - rect.left));
-  player.y = Math.max(25, Math.min(canvas.height-25, y - rect.top));
+
+  player.x = x - rect.left;
+  player.y = y - rect.top;
 }
 
 canvas.addEventListener("mousemove", move);
 canvas.addEventListener("touchmove", move, { passive: false });
 
-function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 
 function drawYarn(p) {
-  ctx.fillStyle = p.type === "common" ? "#8B4513" : p.type === "rare" ? "#3b82f6" : "#a855f7";
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = "white"; ctx.lineWidth = 2.5;
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r*0.6, 0, Math.PI*2); ctx.stroke();
+  if (p.type === "common") ctx.fillStyle = "#8B4513";
+  if (p.type === "rare") ctx.fillStyle = "#3b82f6";
+  if (p.type === "epic") ctx.fillStyle = "#a855f7";
+
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function update() {
-  if (imagesLoaded < 2 || !running) {
+  if (!running) return;
+
+  if (imagesLoaded < totalImages) {
     requestAnimationFrame(update);
     return;
   }
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  if (slowTimer > 0) { slowTimer--; enemy.speed = enemy.baseSpeed * 0.5; }
-  else { enemy.speed = enemy.baseSpeed + score * 0.28; }
+  // скорость врага
+  if (slowTimer > 0) {
+    slowTimer--;
+    enemy.speed = enemy.baseSpeed * 0.5;
+  } else {
+    enemy.speed = enemy.baseSpeed + score * 0.25;
+  }
 
   let dx = player.x - enemy.x;
   let dy = player.y - enemy.y;
-  let d = Math.hypot(dx, dy) || 1;
-  enemy.x += (dx / d) * enemy.speed;
-  enemy.y += (dy / d) * enemy.speed;
+  let d = Math.hypot(dx, dy);
 
-  ctx.drawImage(playerImg, player.x-25, player.y-25, 50, 50);
-
-  ctx.save();
-  ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI*2); ctx.clip();
-  ctx.drawImage(enemyImg, enemy.x-enemy.r, enemy.y-enemy.r, enemy.r*2, enemy.r*2);
-  ctx.restore();
-
-  for (let i = points.length-1; i >= 0; i--) {
-    const p = points[i];
-    drawYarn(p);
-    if (dist(player, p) < 43) {
-      if (p.type === "common") score += 1;
-      else if (p.type === "rare") { score += 1; slowTimer = 110; }
-      else score += 4 + Math.floor(Math.random()*3);
-
-      document.getElementById("score").innerText = "Очки: " + score;
-      points.splice(i, 1);
-      spawnPoint();
-    }
+  if (d > 0) {
+    enemy.x += dx / d * enemy.speed;
+    enemy.y += dy / d * enemy.speed;
   }
 
-  if (dist(player, enemy) < 58) {
+  ctx.drawImage(playerImg, player.x - player.r, player.y - player.r, player.r*2, player.r*2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI*2);
+  ctx.clip();
+
+  ctx.drawImage(enemyImg, enemy.x - enemy.r, enemy.y - enemy.r, enemy.r*2, enemy.r*2);
+
+  ctx.restore();
+
+  points.forEach((p,i)=>{
+    drawYarn(p);
+
+    if (dist(player,p) < player.r + p.r) {
+      if (p.type === "common") score++;
+      if (p.type === "rare") { score++; slowTimer = 90; }
+      if (p.type === "epic") score += 3;
+
+      document.getElementById("score").innerText = "Очки: " + score;
+
+      points.splice(i,1);
+      spawnPoint();
+    }
+  });
+
+  if (dist(player, enemy) < player.r + enemy.r) {
     running = false;
-    document.getElementById("finalScore").innerText = `Твой рекорд: ${score} очков`;
-    document.getElementById("gameOver").classList.remove("hidden");
-    if (currentUser) saveScore(score);
+
+    saveScore(score);
+
+    document.getElementById("finalScore").innerText = "Очки: " + score;
+    document.getElementById("gameOver").style.display = "flex";
   }
 
   requestAnimationFrame(update);
 }
 
+// ================== МЕНЮ ==================
 function startGame() {
-  if (!currentUser) {
-    alert("Сначала войдите в аккаунт!");
-    showLoginModal();
+  playerName = document.getElementById("nameInput").value.trim();
+
+  if (!playerName) {
+    alert("Введите имя!");
     return;
   }
-  document.getElementById("lobby").classList.add("hidden");
+
+  document.getElementById("menu").style.display = "none";
+
   init();
   update();
+}
+
+function backToMenu() {
+  document.getElementById("gameOver").style.display = "none";
+  document.getElementById("menu").style.display = "flex";
 }
 
 function restart() {
-  document.getElementById("gameOver").classList.add("hidden");
   init();
   update();
 }
 
-function goToLobby() {
-  document.getElementById("gameOver").classList.add("hidden");
-  document.getElementById("lobby").classList.remove("hidden");
-  document.getElementById("score").classList.add("hidden");
-}
+// старт
+update();
 
-// ================== ЗАПУСК ==================
-document.getElementById("lobby").classList.remove("hidden");
 </script>
+
 </body>
 </html>
