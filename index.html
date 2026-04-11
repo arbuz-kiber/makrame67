@@ -12,14 +12,24 @@
         canvas { display: block; }
         #score { position: fixed; top: 10px; left: 10px; font-size: 24px; font-weight: bold; z-index: 2; pointer-events: none; }
         
-        /* Таймер замедления */
+        /* Стили для счетчика в меню */
+        .online-badge { 
+            background: #eef2ff; 
+            color: #4f46e5; 
+            padding: 5px 15px; 
+            border-radius: 20px; 
+            font-size: 14px; 
+            font-weight: bold; 
+            margin-bottom: -5px; 
+            border: 1px solid #e0e7ff;
+        }
+
         #slowStatus { 
             position: fixed; top: 10px; right: 10px; font-size: 20px; font-weight: bold; 
             color: #3b82f6; display: none; z-index: 2; background: rgba(255,255,255,0.7);
             padding: 5px 10px; border-radius: 8px;
         }
 
-        /* Эффект заморозки на экране */
         #freezeOverlay {
             position: fixed; inset: 0; display: flex; justify-content: center; align-items: center;
             font-size: 150px; pointer-events: none; z-index: 5; opacity: 0;
@@ -32,6 +42,7 @@
         input { padding: 15px; font-size: 18px; border: 2px solid #ddd; border-radius: 10px; width: 250px; outline: none; }
         
         .tg-button { background: #24A1DE !important; margin-top: 10px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: white; }
+        .tg-subtext { font-size: 12px; color: #888; margin-top: -5px; }
 
         .leaderboard-table { width: 100%; max-width: 300px; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         .leaderboard-table th { background: #6c757d; color: white; padding: 10px; }
@@ -47,13 +58,16 @@
 <div id="freezeOverlay">🥶</div>
 
 <div id="menu" class="overlay">
-    <h1>Побег от Наталии 😈</h1>
+    <div id="onlineCount" class="online-badge">Онлайн: ...</div>
+    
+    <h1 style="margin-top: 0;">Побег от Наталии 😈</h1>
     <input id="nameInput" placeholder="Введите имя" maxlength="15">
     <button onclick="startGame()">Играть</button>
     <button onclick="showLeaderboard()" style="background:#6c757d">🏆 Лидеры</button>
     <a href="https://t.me/+godxyKIhKEs3Zjhi" target="_blank" style="text-decoration: none;">
         <button class="tg-button">📢 Наш Telegram</button>
     </a>
+    <div class="tg-subtext">Свежие новости и обновления игры здесь!</div>
 </div>
 
 <div id="leaderboard" class="overlay" style="display: none;">
@@ -93,7 +107,29 @@
 const SB_URL = "https://zwzrnkpygvfgzsyzjjsy.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3enJua3B5Z3ZmZ3pzeXpqanN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MzUwMTMsImV4cCI6MjA5MTQxMTAxM30.EgZcfaL3dO0nv2utfaIYYk3ROfKdZO__psw2Pk0q6qo";
 let supabaseClient; 
-try { supabaseClient = window.supabase.createClient(SB_URL, SB_KEY); } catch (e) {}
+
+try { 
+    supabaseClient = window.supabase.createClient(SB_URL, SB_KEY);
+    initOnlineCounter();
+} catch (e) { console.error("Supabase error", e); }
+
+async function initOnlineCounter() {
+    const channel = supabaseClient.channel('online-users', {
+        config: { presence: { key: 'user' } }
+    });
+
+    channel
+        .on('presence', { event: 'sync' }, () => {
+            const state = channel.presenceState();
+            const count = Object.keys(state).length;
+            document.getElementById("onlineCount").innerText = "Онлайн: " + count;
+        })
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await channel.track({ online_at: new Date().toISOString() });
+            }
+        });
+}
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -134,19 +170,12 @@ function triggerFreezeAnim() {
 function spawnPoint() {
     const r = Math.random();
     let type;
-if (r < 0.78) {
-        type = "common";   // 78% - Обычный
-    } else if (r < 0.88) {
-        type = "rare";     // 10% - Редкий (Синий)
-    } else if (r < 0.89) {
-        type = "yellow";   // 1% - Макраме (Желтый)
-    } else if (r < 0.96) {
-        type = "epic";     // 7% - Эпик
-    } else if (r < 0.99) {
-        type = "green";    // 3% - Зеленый
-    } else {
-        type = "rainbow";  // 1% - Радужный
-    }
+    if (r < 0.78) type = "common";
+    else if (r < 0.88) type = "rare";
+    else if (r < 0.89) type = "yellow";
+    else if (r < 0.96) type = "epic";
+    else if (r < 0.99) type = "green";
+    else type = "rainbow";
 
     points.push({
         x: Math.random() * (canvas.width - 50) + 25,
@@ -251,14 +280,11 @@ function backToMenu() { document.getElementById("gameOver").style.display = "non
 
 async function showLeaderboard() {
     if (!supabaseClient) return;
-
     document.getElementById("leaderboard").style.display = "flex";
     document.getElementById("menu").style.display = "none";
-
     document.getElementById("leaderboardBody").innerHTML = "<tr><td colspan='3'>Загрузка...</td></tr>";
     document.getElementById("leaderboardTotalBody").innerHTML = "<tr><td colspan='3'>Загрузка...</td></tr>";
 
-    // Загружаем данные параллельно
     const [bestRes, totalRes] = await Promise.all([
         supabaseClient.from("leaderboard").select("*").order("score", { ascending: false }).limit(10),
         supabaseClient.from("leaderboard").select("*").order("total_score", { ascending: false }).limit(10)
@@ -267,12 +293,10 @@ async function showLeaderboard() {
     const best = bestRes.data;
     const total = totalRes.data;
 
-    // Рендер рекорда
     document.getElementById("leaderboardBody").innerHTML = best && best.length > 0
         ? best.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td><b>${p.score}</b></td></tr>`).join("")
         : "<tr><td colspan='3'>Пусто</td></tr>";
 
-    // Рендер total (ИСПРАВЛЕНО p.total -> p.total_score)
     document.getElementById("leaderboardTotalBody").innerHTML = total && total.length > 0
         ? total.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td><b>${p.total_score || 0}</b></td></tr>`).join("")
         : "<tr><td colspan='3'>Пусто</td></tr>";
@@ -282,49 +306,18 @@ function closeLeaderboard() { document.getElementById("leaderboard").style.displ
 
 async function saveToSupabase(s) {
     if (!supabaseClient) return;
-    console.log("Попытка сохранения результата:", s); // Отладка
-
     try {
-        // Ищем игрока
-        const { data, error } = await supabaseClient
-            .from("leaderboard")
-            .select("*")
-            .eq("name", playerName); // Берем массив, чтобы избежать ошибки maybeSingle
-
+        const { data, error } = await supabaseClient.from("leaderboard").select("*").eq("name", playerName);
         if (error) throw error;
-
         if (!data || data.length === 0) {
-            // НОВЫЙ ИГРОК
-            console.log("Создаем нового игрока");
-            const { error: insErr } = await supabaseClient
-                .from("leaderboard")
-                .insert([{
-                    name: playerName,
-                    score: s,
-                    total_score: s
-                }]);
-            if (insErr) console.error("Ошибка вставки:", insErr);
+            await supabaseClient.from("leaderboard").insert([{ name: playerName, score: s, total_score: s }]);
         } else {
-            // СУЩЕСТВУЮЩИЙ ИГРОК
             const user = data[0];
             const newBest = Math.max(s, user.score || 0);
             const newTotal = (user.total_score || 0) + s;
-
-            console.log("Обновляем: Рекорд", newBest, "Тотал", newTotal);
-
-            const { error: updErr } = await supabaseClient
-                .from("leaderboard")
-                .update({
-                    score: newBest,
-                    total_score: newTotal
-                })
-                .eq("name", playerName);
-
-            if (updErr) console.error("Ошибка обновления:", updErr);
+            await supabaseClient.from("leaderboard").update({ score: newBest, total_score: newTotal }).eq("name", playerName);
         }
-    } catch (e) {
-        console.error("Критическая ошибка Supabase:", e);
-    }
+    } catch (e) { console.error("Save Error:", e); }
 }
 </script>
 </body>
