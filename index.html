@@ -106,6 +106,7 @@
 <script>
 const SB_URL = "https://zwzrnkpygvfgzsyzjjsy.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3enJua3B5Z3ZmZ3pzeXpqanN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MzUwMTMsImV4cCI6MjA5MTQxMTAxM30.EgZcfaL3dO0nv2utfaIYYk3ROfKdZO__psw2Pk0q6qo";
+const sessionID = Math.random().toString(36).substring(7);
 let supabaseClient; 
 
 try { 
@@ -113,20 +114,26 @@ try {
     initOnlineCounter();
 } catch (e) { console.error("Supabase error", e); }
 
+// Генерация случайного ID для текущей вкладки, чтобы счетчик видел всех
 async function initOnlineCounter() {
     const channel = supabaseClient.channel('online-users', {
-        config: { presence: { key: 'user' } }
+        config: { presence: { key: sessionID } } // Теперь у каждой вкладки свой ключ
     });
 
     channel
         .on('presence', { event: 'sync' }, () => {
             const state = channel.presenceState();
+            // Считаем количество всех активных ключей в объекте Presence
             const count = Object.keys(state).length;
             document.getElementById("onlineCount").innerText = "Онлайн: " + count;
         })
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                await channel.track({ online_at: new Date().toISOString() });
+                await channel.track({ 
+                    online_at: new Date().toISOString(),
+                    // Можно добавить имя, если оно уже введено
+                    user_name: playerName || 'Аноним' 
+                });
             }
         });
 }
